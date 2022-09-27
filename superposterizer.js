@@ -4,13 +4,26 @@ class SPoster {
     ctx;
     loadedImage = new Image();
 
+    valueSliders = [];
+
     initialize() {
         this.fileSelect = document.getElementById('fileSelect');
         this.canvas = document.getElementById('imageDisplay');
         this.ctx = this.canvas.getContext('2d');
+        this.sampleCharacter = document.querySelector('#sampleCharacter');
+        this.showGuySelect = document.querySelector('#toggleGuy');
+
+        this.ctx.imageSmoothingEnabled = false;
+
+
         document.getElementById('testButton').addEventListener('click', this.applyEffect.bind(this));
         document.getElementById('resetButton').addEventListener('click', this.resetImage.bind(this));
         document.getElementById('downloadImage').addEventListener('click', this.downloadCanvas.bind(this));
+
+        this.valueSliders = document.querySelectorAll(".valueSlider");
+        this.valueSliders.forEach(slider => {
+            slider.onchange = () => this.applyEffect();
+        });
 
         this.loadedImage.addEventListener('load', this.drawLoadedImageToCanvas.bind(this));
 
@@ -26,11 +39,16 @@ class SPoster {
     applyEffect() {
         this.resetImage();
 
+        let valueRanges = Array.from(this.valueSliders, slider => Number(slider.value));
+        //let valueRanges = [0.1, 0.2, 0.5, 0.8, 0.9];
+        valueRanges.sort((a, b) => a - b);
+        console.log(valueRanges);
+        
+
         let hSplit = document.getElementById('hSplit').value;
         let sSplit = document.getElementById('sSplit').value;
-        let lSplit = document.getElementById('lSplit').value;
 
-        let scale = document.getElementById('scale').value;
+        let margin = document.getElementById('margin').value;
 
         let imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
         let data = imageData.data;
@@ -44,7 +62,7 @@ class SPoster {
             let hsl = this.rgbToHsl(r, g, b);
             hsl.h = this.round(hsl.h, hSplit, 0);
             hsl.s = this.round(hsl.s, sSplit, 0);
-            hsl.l = this.round(hsl.l, lSplit, 0);
+            hsl.l = this.stratify(hsl.l, valueRanges, margin);
 
             let rgb = this.hslToRgb(hsl.h, hsl.s, hsl.l);
             data[i] = rgb.r;
@@ -53,6 +71,10 @@ class SPoster {
         }
 
         this.ctx.putImageData(imageData, 0, 0);
+
+        if (this.showGuySelect.checked) {
+            this.ctx.drawImage(this.sampleCharacter, (this.canvas.width / 2) - this.sampleCharacter.width / 2, (this.canvas.height / 2) - this.sampleCharacter.height / 2);
+        }
     }
 
     resetImage() {
@@ -64,10 +86,17 @@ class SPoster {
         let scale = document.querySelector('#scale').value;
 
         const img = this.loadedImage;
-        this.canvas.height = img.height;
-        this.canvas.width = img.width;
-        this.ctx.scale(scale, scale);
+        this.canvas.height = img.height / scale;
+        this.canvas.width = img.width / scale;
+
+        this.ctx.imageSmoothingEnabled = false;
+        
         this.ctx.drawImage(img, 0, 0, img.width / scale, img.height / scale);
+
+    
+        this.canvas.style.width = '100%';
+        this.ctx.imageSmoothingEnabled = false;
+
     }
 
     downloadCanvas() {
@@ -75,6 +104,21 @@ class SPoster {
         anchor.href = this.canvas.toDataURL('image/png');
         anchor.download = 'image.png';
         anchor.click();
+    }
+
+    stratify(number, ranges, margin) {
+        margin = margin == null ? 0 : margin;
+
+        let result = number;
+        for (const range of ranges) {
+            let totalRange = Number(range) + Number(margin);
+            if (number <= totalRange) {
+                result = number <= range ? range : number;
+                break;
+            }
+        }
+
+        return result;
     }
 
     round(number, increment, offset) {

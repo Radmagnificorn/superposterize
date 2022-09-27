@@ -1,3 +1,9 @@
 #imageDisplay {
     display: block;
+    image-rendering: pixelated;
+}
+
+.valueSlider {
+    display: block;
+    width: 400px;
 }

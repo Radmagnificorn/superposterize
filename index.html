@@ -12,8 +12,21 @@
         <button id='testButton'>Posterize</button>
         H Step: <input type="number" id="hSplit" min="0" max="1" value="0.01">
         S Step: <input type="number" id="sSplit" min="0" max="0.5" value="0.01" step="0.01">
-        L Step: <input type="number" id="lSplit" min="0" max="0.5" value="0.2" step="0.01">
+        <label for="toggleGuy">Toggle Guy: </label>
+        <input type="checkbox" name="toggleGuy" id="toggleGuy">
         Scale: <input type="number" id="scale" value="1">
         <canvas id="imageDisplay"></canvas>
+        <div id="valueControls">
+            <label for="margin">Margin: </label>
+            <input type="number" id="margin" name="margin" min="0" max="1" value="0">
+            
+            <input type="range" class="valueSlider" min="0" max="1" step="0.05" value="0.1">
+            <input type="range" class="valueSlider" min="0" max="1" step="0.05" value="0.2">
+            <input type="range" class="valueSlider" min="0" max="1" step="0.05" value="0.5">
+            <input type="range" class="valueSlider" min="0" max="1" step="0.05" value="0.8">
+            <input type="range" class="valueSlider" min="0" max="1" step="0.05" value="0.9">
+            
+        </div>
+        <img id="sampleCharacter" src="./samplecharacter.png"/>
     </body>
 </html>
