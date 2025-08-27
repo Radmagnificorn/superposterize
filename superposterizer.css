@@ -50,3 +50,15 @@
     margin-right: 6px;
     margin-top: 6px;
 }
+
+.palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+}
+.palette .swatch {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #ccc;
+}

@@ -49,9 +49,15 @@
                     <input type="number" id="blockW" value="8" min="1" step="1" disabled />
                     <label for="blockH">Block H:</label>
                     <input type="number" id="blockH" value="8" min="1" step="1" disabled />
+                    <label for="snapTolerance" style="margin-left:12px">Snap tolerance (%):</label>
+                    <input type="number" id="snapTolerance" value="8" min="0" max="100" step="1" />
+                    <button id="snapColorsBtn">Snap Colors</button>
+                    <label style="margin-left:8px"><input type="checkbox" id="useHSL" /> Snap in HSL</label>
+                    <label style="margin-left:8px"><input type="checkbox" id="useSimpleBins" /> Use simple channel bins</label>
                     <button id="downloadNormalized">Download Normalized</button>
                     <div id="analysisInfo" aria-live="polite" style="margin:8px 0;color:#555"></div>
                     <canvas id="normalizedCanvas" aria-label="Normalized pixel art output"></canvas>
+                    <div id="paletteSwatches" class="palette" aria-label="Palette preview"></div>
                 </div>
             </section>
         </div>

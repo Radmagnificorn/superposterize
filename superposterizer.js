@@ -194,6 +194,10 @@ class PixelNormalizer {
     this.autoDetect = null;
     this.blockWInput = null;
     this.blockHInput = null;
+    this.snapToleranceInput = null;
+    this.snapButton = null;
+    this.useSimpleBins = null;
+    this.useHSL = null;
 
         this.srcImage.addEventListener('load', () => {
             // Draw to work canvas at 1:1 for sampling
@@ -216,6 +220,10 @@ class PixelNormalizer {
     this.autoDetect = document.getElementById('autoDetect');
     this.blockWInput = document.getElementById('blockW');
     this.blockHInput = document.getElementById('blockH');
+    this.snapToleranceInput = document.getElementById('snapTolerance');
+    this.snapButton = document.getElementById('snapColorsBtn');
+    this.useSimpleBins = document.getElementById('useSimpleBins');
+    this.useHSL = document.getElementById('useHSL');
 
         if (!this.inputFile || !this.outCanvas) return; // Not on this tab
 
@@ -249,6 +257,21 @@ class PixelNormalizer {
             const manual = !this.autoDetect.checked;
             this.blockWInput.disabled = !manual ? true : false;
             this.blockHInput.disabled = !manual ? true : false;
+        });
+
+        this.snapButton.addEventListener('click', () => {
+            if (!this._lastResult) return;
+            const tolPct = Math.max(0, Math.min(100, parseInt(this.snapToleranceInput.value || '8', 10)));
+            if (this.useSimpleBins && this.useSimpleBins.checked) {
+                this._lastResult = this.snapColorsBinned(this._lastResult, tolPct);
+            } else {
+                if (this.useHSL && this.useHSL.checked) {
+                    this._lastResult = this.snapColorsHSL(this._lastResult, tolPct);
+                } else {
+                    this._lastResult = this.snapColors(this._lastResult, tolPct);
+                }
+            }
+            this.renderOutput(this._lastResult);
         });
     }
 
@@ -310,7 +333,7 @@ class PixelNormalizer {
             this.analysisInfo.textContent = `Source ${width}x${height} → ${mode} block ${pxW}x${pxH} → native ${outW}x${outH}`;
         }
 
-        const result = { canvas: outCanvas, pxW, pxH, outW, outH };
+    const result = { canvas: outCanvas, pxW, pxH, outW, outH, palette: null };
         this._lastResult = result;
         return result;
     }
@@ -322,6 +345,252 @@ class PixelNormalizer {
         this.outCtx.imageSmoothingEnabled = false;
         this.outCtx.clearRect(0, 0, this.outCanvas.width, this.outCanvas.height);
         this.outCtx.drawImage(result.canvas, 0, 0, this.outCanvas.width, this.outCanvas.height);
+    }
+
+    // Palette snapping: group similar colors within a tolerance and replace with group centroid color
+    snapColors(result, tolerancePercent) {
+        // Read pixels from the 1:1 normalized canvas
+        const srcCtx = result.canvas.getContext('2d');
+        const img = srcCtx.getImageData(0, 0, result.outW, result.outH);
+        const data = img.data;
+        const len = result.outW * result.outH;
+
+        // Convert tolerance percent into a radius in perceptual-ish space. Max distance ~ 255*sqrt(3) ≈ 441.
+        const maxDist = 441; // rough RGB Euclidean max
+        const radius = (tolerancePercent / 100) * maxDist;
+
+        // Simple online clustering: iterate pixels, assign to first cluster within radius; otherwise create a new cluster.
+        const clusters = []; // { r, g, b, n }
+        for (let i = 0; i < len; i++) {
+            const o = i * 4;
+            const r = data[o], g = data[o + 1], b = data[o + 2];
+            let idx = -1;
+            let best = Infinity;
+            for (let c = 0; c < clusters.length; c++) {
+                const cr = clusters[c].r / clusters[c].n;
+                const cg = clusters[c].g / clusters[c].n;
+                const cb = clusters[c].b / clusters[c].n;
+                const d = Math.hypot(r - cr, g - cg, b - cb);
+                if (d < best) { best = d; idx = c; }
+            }
+            if (best <= radius && idx >= 0) {
+                clusters[idx].r += r; clusters[idx].g += g; clusters[idx].b += b; clusters[idx].n += 1;
+            } else {
+                clusters.push({ r, g, b, n: 1 });
+            }
+        }
+
+        // Compute centroids
+    // Initial palette from centroids
+    let palette = clusters.map(c => ({
+            r: Math.round(c.r / c.n),
+            g: Math.round(c.g / c.n),
+            b: Math.round(c.b / c.n)
+        }));
+
+    // Merge very similar palette colors to avoid near-duplicates
+    palette = this._mergePalette(palette, radius * 0.5);
+
+        // Remap image to nearest palette color
+        for (let i = 0; i < len; i++) {
+            const o = i * 4;
+            const r = data[o], g = data[o + 1], b = data[o + 2];
+            let best = Infinity, br = 0, bg = 0, bb = 0;
+            for (let p = 0; p < palette.length; p++) {
+                const pr = palette[p].r, pg = palette[p].g, pb = palette[p].b;
+                const d = Math.hypot(r - pr, g - pg, b - pb);
+                if (d < best) { best = d; br = pr; bg = pg; bb = pb; }
+            }
+            data[o] = br; data[o + 1] = bg; data[o + 2] = bb; data[o + 3] = 255;
+        }
+
+        srcCtx.putImageData(img, 0, 0);
+        if (this.analysisInfo) {
+            this.analysisInfo.textContent += ` | snapped to ${palette.length} colors (tol ${tolerancePercent}%)`;
+        }
+        this._renderPalette(palette);
+        return { ...result, canvas: result.canvas, palette };
+    }
+
+    // HSL snapping: cluster in HSL space with circular hue distance
+    snapColorsHSL(result, tolerancePercent) {
+        const ctx = result.canvas.getContext('2d');
+        const img = ctx.getImageData(0, 0, result.outW, result.outH);
+        const d = img.data;
+        const len = result.outW * result.outH;
+
+        // Build clusters with radius based on tolerance. Distance metric: weighted HSL distance.
+        // Hue distance is circular in degrees (0..360). We'll convert RGB->HSL per pixel.
+        const radius = (tolerancePercent / 100) * 1.0; // H,S,L in [0,1], hue in [0,1] wrap
+
+        const clusters = []; // { hSumCos, hSumSin, s, l, n }
+        const toHSL = (r,g,b)=>{
+            r/=255; g/=255; b/=255;
+            const max=Math.max(r,g,b), min=Math.min(r,g,b);
+            let h=0, s=0, l=(max+min)/2;
+            if (max!==min){
+                const d=max-min;
+                s = l>0.5 ? d/(2-max-min) : d/(max+min);
+                switch(max){
+                    case r: h=(g-b)/d + (g<b?6:0); break;
+                    case g: h=(b-r)/d + 2; break;
+                    case b: h=(r-g)/d + 4; break;
+                }
+                h/=6;
+            }
+            return {h,s,l};
+        };
+
+        const hDist = (h1,h2)=>{
+            let dh = Math.abs(h1 - h2);
+            return Math.min(dh, 1 - dh);
+        };
+
+        const dist = (a,b)=>{
+            // Weight hue slightly more than S and L
+            const wh=1.2, ws=1.0, wl=1.0;
+            return Math.hypot(wh*hDist(a.h,b.h), ws*(a.s-b.s), wl*(a.l-b.l));
+        };
+
+        // Online clustering
+        const values = new Array(len);
+        for (let i=0;i<len;i++){
+            const o=i*4; values[i]=toHSL(d[o],d[o+1],d[o+2]);
+        }
+
+        const toCentroid = (c)=>{
+            const h = (Math.atan2(c.hSin, c.hCos)/(2*Math.PI) + 1) % 1;
+            return { h, s: c.s/c.n, l: c.l/c.n };
+        };
+
+        for (let i=0;i<len;i++){
+            const v = values[i];
+            let best=-1, bestD=Infinity;
+            for (let k=0;k<clusters.length;k++){
+                const c=toCentroid(clusters[k]);
+                const di = dist(v,c);
+                if (di<bestD){bestD=di; best=k;}
+            }
+            if (bestD<=radius && best>=0){
+                const cl=clusters[best];
+                cl.s+=v.s; cl.l+=v.l; cl.n+=1;
+                const ang=2*Math.PI*v.h; cl.hCos+=Math.cos(ang); cl.hSin+=Math.sin(ang);
+            } else {
+                const ang=2*Math.PI*v.h;
+                clusters.push({ hCos:Math.cos(ang), hSin:Math.sin(ang), s:v.s, l:v.l, n:1 });
+            }
+        }
+
+        // Build palette from HSL centroids, then map pixels to nearest and convert to RGB
+        const paletteHSL = clusters.map(toCentroid);
+        const paletteRGB = paletteHSL.map(c=>this._hslToRgb255(c.h,c.s,c.l));
+
+        for (let i=0;i<len;i++){
+            const v = values[i];
+            let best=Infinity, bi=0;
+            for (let p=0;p<paletteHSL.length;p++){
+                const di=dist(v, paletteHSL[p]);
+                if (di<best){best=di; bi=p;}
+            }
+            const o=i*4; const pc=paletteRGB[bi];
+            d[o]=pc.r; d[o+1]=pc.g; d[o+2]=pc.b; d[o+3]=255;
+        }
+
+        ctx.putImageData(img,0,0);
+        if (this.analysisInfo) this.analysisInfo.textContent += ` | HSL snapped to ${paletteRGB.length} colors (tol ${tolerancePercent}%)`;
+        this._renderPalette(paletteRGB);
+        return { ...result, canvas: result.canvas, palette: paletteRGB };
+    }
+
+    _hslToRgb255(h,s,l){
+        let r,g,b;
+        if (s===0){ r=g=b=l; }
+        else{
+            const hue2rgb=(p,q,t)=>{
+                if (t<0) t+=1; if (t>1) t-=1;
+                if (t<1/6) return p+(q-p)*6*t;
+                if (t<1/2) return q;
+                if (t<2/3) return p+(q-p)*(2/3 - t)*6;
+                return p;
+            };
+            const q = l < 0.5 ? l*(1+s) : l + s - l*s;
+            const p = 2*l - q;
+            r=hue2rgb(p,q,h+1/3); g=hue2rgb(p,q,h); b=hue2rgb(p,q,h-1/3);
+        }
+        return { r: Math.round(r*255), g: Math.round(g*255), b: Math.round(b*255) };
+    }
+
+    // Simpler, stronger quantization: per-channel binning based on tolerance percentage
+    snapColorsBinned(result, tolerancePercent) {
+        const ctx = result.canvas.getContext('2d');
+        const img = ctx.getImageData(0, 0, result.outW, result.outH);
+        const d = img.data;
+        const len = result.outW * result.outH;
+
+        // Convert tolerance percent to bin size (1-255). Higher tolerance => larger bins => fewer colors
+        // Map 0% -> bin 1 (no change), 100% -> bin 64 (coarse). Tuneable.
+        const bin = Math.max(1, Math.round(1 + (tolerancePercent / 100) * 63));
+        const snap = (v) => Math.min(255, Math.round(Math.round(v / bin) * bin));
+
+        for (let i = 0; i < len; i++) {
+            const o = i * 4;
+            d[o] = snap(d[o]);
+            d[o + 1] = snap(d[o + 1]);
+            d[o + 2] = snap(d[o + 2]);
+            d[o + 3] = 255;
+        }
+
+        ctx.putImageData(img, 0, 0);
+        if (this.analysisInfo) {
+            this.analysisInfo.textContent += ` | binned (bin=${bin})`;
+        }
+        // Build palette from image after binning
+        const set = new Set();
+        for (let i = 0; i < len; i++) {
+            const o = i * 4;
+            set.add(`${d[o]},${d[o+1]},${d[o+2]}`);
+        }
+        const palette = Array.from(set).map(s => {
+            const [r,g,b] = s.split(',').map(n=>parseInt(n,10));
+            return { r, g, b };
+        });
+        this._renderPalette(palette);
+        return { ...result, canvas: result.canvas, palette };
+    }
+
+    _mergePalette(palette, mergeRadius) {
+        const clusters = [];
+        for (const c of palette) {
+            let best = -1, bestD = Infinity;
+            for (let i = 0; i < clusters.length; i++) {
+                const cc = clusters[i];
+                const d = Math.hypot(c.r - cc.r, c.g - cc.g, c.b - cc.b);
+                if (d < bestD) { bestD = d; best = i; }
+            }
+            if (bestD <= mergeRadius && best >= 0) {
+                // average merge
+                const cc = clusters[best];
+                cc.r = Math.round((cc.r + c.r) / 2);
+                cc.g = Math.round((cc.g + c.g) / 2);
+                cc.b = Math.round((cc.b + c.b) / 2);
+            } else {
+                clusters.push({ ...c });
+            }
+        }
+        return clusters;
+    }
+
+    _renderPalette(palette) {
+        const container = document.getElementById('paletteSwatches');
+        if (!container) return;
+        container.innerHTML = '';
+        palette.forEach(c => {
+            const sw = document.createElement('div');
+            sw.className = 'swatch';
+            sw.title = `rgb(${c.r},${c.g},${c.b})`;
+            sw.style.background = `rgb(${c.r}, ${c.g}, ${c.b})`;
+            container.appendChild(sw);
+        });
     }
 
     // Helpers
