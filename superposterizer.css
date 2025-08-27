@@ -7,3 +7,46 @@
     display: block;
     width: 400px;
 }
+
+/* Tabs UI */
+.tablist {
+    display: flex;
+    gap: 8px;
+    border-bottom: 1px solid #ddd;
+    margin-bottom: 12px;
+}
+
+[role="tab"] {
+    background: #f6f6f6;
+    border: 1px solid #ddd;
+    border-bottom: none;
+    padding: 6px 12px;
+    cursor: pointer;
+}
+
+[role="tab"][aria-selected="true"] {
+    background: #fff;
+    font-weight: 600;
+}
+
+[role="tabpanel"] {
+    padding: 8px 0;
+}
+
+.new-app-placeholder {
+    color: #444;
+}
+
+/* Normalizer styles */
+#normalizedCanvas {
+    image-rendering: pixelated;
+    display: block;
+    margin-top: 8px;
+}
+
+.new-app input[type="file"],
+.new-app button,
+.new-app input[type="number"] {
+    margin-right: 6px;
+    margin-top: 6px;
+}
