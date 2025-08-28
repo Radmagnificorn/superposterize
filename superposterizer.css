@@ -44,6 +44,13 @@
     margin-top: 8px;
 }
 
+#sourceCanvas {
+    image-rendering: pixelated;
+    display: block;
+    margin-top: 8px;
+    border: 1px dashed #ccc;
+}
+
 .new-app input[type="file"],
 .new-app button,
 .new-app input[type="number"] {

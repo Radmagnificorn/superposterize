@@ -187,6 +187,8 @@ class PixelNormalizer {
         this.workCtx = this.workCanvas.getContext('2d');
         this.outCanvas = null;
         this.outCtx = null;
+    this.srcCanvas = null;
+    this.srcCtx = null;
         this.analysisInfo = null;
         this.normalizeButton = null;
         this.displayScaleInput = null;
@@ -196,8 +198,6 @@ class PixelNormalizer {
     this.blockHInput = null;
     this.snapToleranceInput = null;
     this.snapButton = null;
-    this.useSimpleBins = null;
-    this.useHSL = null;
 
         this.srcImage.addEventListener('load', () => {
             // Draw to work canvas at 1:1 for sampling
@@ -206,13 +206,17 @@ class PixelNormalizer {
             this.workCtx.imageSmoothingEnabled = false;
             this.workCtx.drawImage(this.srcImage, 0, 0);
             if (this.analysisInfo) this.analysisInfo.textContent = `Loaded ${this.srcImage.width}x${this.srcImage.height}. Ready to analyze.`;
+            // Update visible source view with grid
+            this._drawSourceWithGrid();
         });
     }
 
     initialize() {
         this.inputFile = document.getElementById('aiFileSelect');
-        this.outCanvas = document.getElementById('normalizedCanvas');
+    this.outCanvas = document.getElementById('normalizedCanvas');
         this.outCtx = this.outCanvas.getContext('2d');
+    this.srcCanvas = document.getElementById('sourceCanvas');
+    this.srcCtx = this.srcCanvas ? this.srcCanvas.getContext('2d') : null;
         this.analysisInfo = document.getElementById('analysisInfo');
         this.normalizeButton = document.getElementById('normalizeButton');
         this.displayScaleInput = document.getElementById('normScale');
@@ -222,10 +226,14 @@ class PixelNormalizer {
     this.blockHInput = document.getElementById('blockH');
     this.snapToleranceInput = document.getElementById('snapTolerance');
     this.snapButton = document.getElementById('snapColorsBtn');
-    this.useSimpleBins = document.getElementById('useSimpleBins');
-    this.useHSL = document.getElementById('useHSL');
 
         if (!this.inputFile || !this.outCanvas) return; // Not on this tab
+
+        // Since auto-detect is off by default, ensure manual fields are enabled
+        if (this.autoDetect && !this.autoDetect.checked) {
+            this.blockWInput.disabled = false;
+            this.blockHInput.disabled = false;
+        }
 
         this.inputFile.onchange = (e) => {
             const f = e.target.files && e.target.files[0];
@@ -240,8 +248,8 @@ class PixelNormalizer {
         });
 
         this.displayScaleInput.addEventListener('change', () => {
-            if (!this._lastResult) return;
-            this.renderOutput(this._lastResult);
+            if (this._lastResult) this.renderOutput(this._lastResult);
+            this._drawSourceWithGrid();
         });
 
         this.downloadButton.addEventListener('click', () => {
@@ -257,20 +265,16 @@ class PixelNormalizer {
             const manual = !this.autoDetect.checked;
             this.blockWInput.disabled = !manual ? true : false;
             this.blockHInput.disabled = !manual ? true : false;
+            this._drawSourceWithGrid();
         });
+
+        this.blockWInput.addEventListener('input', () => this._drawSourceWithGrid());
+        this.blockHInput.addEventListener('input', () => this._drawSourceWithGrid());
 
         this.snapButton.addEventListener('click', () => {
             if (!this._lastResult) return;
             const tolPct = Math.max(0, Math.min(100, parseInt(this.snapToleranceInput.value || '8', 10)));
-            if (this.useSimpleBins && this.useSimpleBins.checked) {
-                this._lastResult = this.snapColorsBinned(this._lastResult, tolPct);
-            } else {
-                if (this.useHSL && this.useHSL.checked) {
-                    this._lastResult = this.snapColorsHSL(this._lastResult, tolPct);
-                } else {
-                    this._lastResult = this.snapColors(this._lastResult, tolPct);
-                }
-            }
+            this._lastResult = this.snapColorsHSL(this._lastResult, tolPct);
             this.renderOutput(this._lastResult);
         });
     }
@@ -297,7 +301,7 @@ class PixelNormalizer {
         pxH = Math.max(1, pxH);
 
         const outW = Math.max(1, Math.round(width / pxW));
-        const outH = Math.max(1, Math.round(height / pxH));
+    const outH = Math.max(1, Math.round(height / pxH));
 
     // 2) For each destination pixel, find corresponding center in source and take median color in a local window
         const outCanvas = document.createElement('canvas');
@@ -328,13 +332,15 @@ class PixelNormalizer {
         }
         outCtx.putImageData(outImage, 0, 0);
 
-        if (this.analysisInfo) {
+    if (this.analysisInfo) {
             const mode = (this.autoDetect && this.autoDetect.checked) ? 'auto' : 'manual';
             this.analysisInfo.textContent = `Source ${width}x${height} → ${mode} block ${pxW}x${pxH} → native ${outW}x${outH}`;
         }
 
     const result = { canvas: outCanvas, pxW, pxH, outW, outH, palette: null };
         this._lastResult = result;
+    // Refresh source view with detected grid
+    this._drawSourceWithGrid(pxW, pxH);
         return result;
     }
 
@@ -347,69 +353,52 @@ class PixelNormalizer {
         this.outCtx.drawImage(result.canvas, 0, 0, this.outCanvas.width, this.outCanvas.height);
     }
 
-    // Palette snapping: group similar colors within a tolerance and replace with group centroid color
-    snapColors(result, tolerancePercent) {
-        // Read pixels from the 1:1 normalized canvas
-        const srcCtx = result.canvas.getContext('2d');
-        const img = srcCtx.getImageData(0, 0, result.outW, result.outH);
-        const data = img.data;
-        const len = result.outW * result.outH;
+    _drawSourceWithGrid(pxW, pxH) {
+        if (!this.srcCanvas || !this.srcCtx || !this.srcImage || !this.srcImage.width) return;
+        const imgW = this.srcImage.width;
+        const imgH = this.srcImage.height;
+        // Internal size stays 1:1; scale via CSS for view
+        this.srcCanvas.width = imgW;
+        this.srcCanvas.height = imgH;
+        const scale = Math.max(1, parseInt(this.displayScaleInput?.value || '8', 10));
+        const cssScale = Math.min(scale, 4); // cap to avoid huge element
+        this.srcCanvas.style.width = (imgW * cssScale) + 'px';
+        this.srcCanvas.style.height = (imgH * cssScale) + 'px';
+        this.srcCtx.imageSmoothingEnabled = false;
+        this.srcCtx.clearRect(0, 0, imgW, imgH);
+        this.srcCtx.drawImage(this.srcImage, 0, 0);
 
-        // Convert tolerance percent into a radius in perceptual-ish space. Max distance ~ 255*sqrt(3) ≈ 441.
-        const maxDist = 441; // rough RGB Euclidean max
-        const radius = (tolerancePercent / 100) * maxDist;
-
-        // Simple online clustering: iterate pixels, assign to first cluster within radius; otherwise create a new cluster.
-        const clusters = []; // { r, g, b, n }
-        for (let i = 0; i < len; i++) {
-            const o = i * 4;
-            const r = data[o], g = data[o + 1], b = data[o + 2];
-            let idx = -1;
-            let best = Infinity;
-            for (let c = 0; c < clusters.length; c++) {
-                const cr = clusters[c].r / clusters[c].n;
-                const cg = clusters[c].g / clusters[c].n;
-                const cb = clusters[c].b / clusters[c].n;
-                const d = Math.hypot(r - cr, g - cg, b - cb);
-                if (d < best) { best = d; idx = c; }
-            }
-            if (best <= radius && idx >= 0) {
-                clusters[idx].r += r; clusters[idx].g += g; clusters[idx].b += b; clusters[idx].n += 1;
+        // Determine grid block size to show
+        let bw = pxW, bh = pxH;
+        if (!bw || !bh) {
+            if (this.autoDetect && this.autoDetect.checked && this._lastResult) {
+                bw = this._lastResult.pxW;
+                bh = this._lastResult.pxH;
             } else {
-                clusters.push({ r, g, b, n: 1 });
+                bw = Math.max(1, parseInt(this.blockWInput?.value || '8', 10));
+                bh = Math.max(1, parseInt(this.blockHInput?.value || '8', 10));
             }
         }
 
-        // Compute centroids
-    // Initial palette from centroids
-    let palette = clusters.map(c => ({
-            r: Math.round(c.r / c.n),
-            g: Math.round(c.g / c.n),
-            b: Math.round(c.b / c.n)
-        }));
-
-    // Merge very similar palette colors to avoid near-duplicates
-    palette = this._mergePalette(palette, radius * 0.5);
-
-        // Remap image to nearest palette color
-        for (let i = 0; i < len; i++) {
-            const o = i * 4;
-            const r = data[o], g = data[o + 1], b = data[o + 2];
-            let best = Infinity, br = 0, bg = 0, bb = 0;
-            for (let p = 0; p < palette.length; p++) {
-                const pr = palette[p].r, pg = palette[p].g, pb = palette[p].b;
-                const d = Math.hypot(r - pr, g - pg, b - pb);
-                if (d < best) { best = d; br = pr; bg = pg; bb = pb; }
-            }
-            data[o] = br; data[o + 1] = bg; data[o + 2] = bb; data[o + 3] = 255;
+        // Draw grid overlay
+        this.srcCtx.save();
+        this.srcCtx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
+        this.srcCtx.lineWidth = 1;
+        // Vertical lines
+        for (let x = 0; x <= imgW; x += bw) {
+            this.srcCtx.beginPath();
+            this.srcCtx.moveTo(Math.floor(x) + 0.5, 0);
+            this.srcCtx.lineTo(Math.floor(x) + 0.5, imgH);
+            this.srcCtx.stroke();
         }
-
-        srcCtx.putImageData(img, 0, 0);
-        if (this.analysisInfo) {
-            this.analysisInfo.textContent += ` | snapped to ${palette.length} colors (tol ${tolerancePercent}%)`;
+        // Horizontal lines
+        for (let y = 0; y <= imgH; y += bh) {
+            this.srcCtx.beginPath();
+            this.srcCtx.moveTo(0, Math.floor(y) + 0.5);
+            this.srcCtx.lineTo(imgW, Math.floor(y) + 0.5);
+            this.srcCtx.stroke();
         }
-        this._renderPalette(palette);
-        return { ...result, canvas: result.canvas, palette };
+        this.srcCtx.restore();
     }
 
     // HSL snapping: cluster in HSL space with circular hue distance
@@ -520,43 +509,7 @@ class PixelNormalizer {
         return { r: Math.round(r*255), g: Math.round(g*255), b: Math.round(b*255) };
     }
 
-    // Simpler, stronger quantization: per-channel binning based on tolerance percentage
-    snapColorsBinned(result, tolerancePercent) {
-        const ctx = result.canvas.getContext('2d');
-        const img = ctx.getImageData(0, 0, result.outW, result.outH);
-        const d = img.data;
-        const len = result.outW * result.outH;
-
-        // Convert tolerance percent to bin size (1-255). Higher tolerance => larger bins => fewer colors
-        // Map 0% -> bin 1 (no change), 100% -> bin 64 (coarse). Tuneable.
-        const bin = Math.max(1, Math.round(1 + (tolerancePercent / 100) * 63));
-        const snap = (v) => Math.min(255, Math.round(Math.round(v / bin) * bin));
-
-        for (let i = 0; i < len; i++) {
-            const o = i * 4;
-            d[o] = snap(d[o]);
-            d[o + 1] = snap(d[o + 1]);
-            d[o + 2] = snap(d[o + 2]);
-            d[o + 3] = 255;
-        }
-
-        ctx.putImageData(img, 0, 0);
-        if (this.analysisInfo) {
-            this.analysisInfo.textContent += ` | binned (bin=${bin})`;
-        }
-        // Build palette from image after binning
-        const set = new Set();
-        for (let i = 0; i < len; i++) {
-            const o = i * 4;
-            set.add(`${d[o]},${d[o+1]},${d[o+2]}`);
-        }
-        const palette = Array.from(set).map(s => {
-            const [r,g,b] = s.split(',').map(n=>parseInt(n,10));
-            return { r, g, b };
-        });
-        this._renderPalette(palette);
-        return { ...result, canvas: result.canvas, palette };
-    }
+    // (RGB snap and binned snap removed; HSL snap is the default)
 
     _mergePalette(palette, mergeRadius) {
         const clusters = [];
