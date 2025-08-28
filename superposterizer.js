@@ -224,6 +224,8 @@ class PixelNormalizer {
     this.autoDetect = document.getElementById('autoDetect');
     this.blockWInput = document.getElementById('blockW');
     this.blockHInput = document.getElementById('blockH');
+    this.gridOffsetXInput = document.getElementById('gridOffsetX');
+    this.gridOffsetYInput = document.getElementById('gridOffsetY');
     this.snapToleranceInput = document.getElementById('snapTolerance');
     this.snapButton = document.getElementById('snapColorsBtn');
 
@@ -270,6 +272,8 @@ class PixelNormalizer {
 
         this.blockWInput.addEventListener('input', () => this._drawSourceWithGrid());
         this.blockHInput.addEventListener('input', () => this._drawSourceWithGrid());
+    this.gridOffsetXInput.addEventListener('input', () => this._drawSourceWithGrid());
+    this.gridOffsetYInput.addEventListener('input', () => this._drawSourceWithGrid());
 
         this.snapButton.addEventListener('click', () => {
             if (!this._lastResult) return;
@@ -300,8 +304,8 @@ class PixelNormalizer {
         pxW = Math.max(1, pxW);
         pxH = Math.max(1, pxH);
 
-        const outW = Math.max(1, Math.round(width / pxW));
-    const outH = Math.max(1, Math.round(height / pxH));
+    const outW = Math.max(1, Math.round((width - (parseInt(this.gridOffsetXInput?.value||'0',10)%pxW)) / pxW));
+    const outH = Math.max(1, Math.round((height - (parseInt(this.gridOffsetYInput?.value||'0',10)%pxH)) / pxH));
 
     // 2) For each destination pixel, find corresponding center in source and take median color in a local window
         const outCanvas = document.createElement('canvas');
@@ -312,8 +316,10 @@ class PixelNormalizer {
         const outArr = outImage.data;
 
         // Center offsets: assume pixel centers near block centers
-        const cxOff = pxW / 2;
-        const cyOff = pxH / 2;
+    const offX = parseInt(this.gridOffsetXInput?.value || '0', 10) || 0;
+    const offY = parseInt(this.gridOffsetYInput?.value || '0', 10) || 0;
+    const cxOff = (pxW / 2) + offX;
+    const cyOff = (pxH / 2) + offY;
         // Sampling radius within the block to reduce boundary artifacts
         const rx = Math.max(1, Math.floor(pxW * 0.25));
         const ry = Math.max(1, Math.floor(pxH * 0.25));
@@ -337,7 +343,14 @@ class PixelNormalizer {
             this.analysisInfo.textContent = `Source ${width}x${height} → ${mode} block ${pxW}x${pxH} → native ${outW}x${outH}`;
         }
 
-    const result = { canvas: outCanvas, pxW, pxH, outW, outH, palette: null };
+    // Keep a base copy of the normalized image so snaps are non-cumulative
+    const baseCanvas = document.createElement('canvas');
+    baseCanvas.width = outW;
+    baseCanvas.height = outH;
+    const baseCtx = baseCanvas.getContext('2d');
+    baseCtx.drawImage(outCanvas, 0, 0);
+
+    const result = { canvas: outCanvas, baseCanvas, pxW, pxH, outW, outH, palette: null };
         this._lastResult = result;
     // Refresh source view with detected grid
     this._drawSourceWithGrid(pxW, pxH);
@@ -380,19 +393,21 @@ class PixelNormalizer {
             }
         }
 
-        // Draw grid overlay
+    // Draw grid overlay
         this.srcCtx.save();
         this.srcCtx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
         this.srcCtx.lineWidth = 1;
-        // Vertical lines
-        for (let x = 0; x <= imgW; x += bw) {
+    const offX = parseInt(this.gridOffsetXInput?.value || '0', 10) || 0;
+    const offY = parseInt(this.gridOffsetYInput?.value || '0', 10) || 0;
+    // Vertical lines
+    for (let x = offX; x <= imgW; x += bw) {
             this.srcCtx.beginPath();
             this.srcCtx.moveTo(Math.floor(x) + 0.5, 0);
             this.srcCtx.lineTo(Math.floor(x) + 0.5, imgH);
             this.srcCtx.stroke();
         }
         // Horizontal lines
-        for (let y = 0; y <= imgH; y += bh) {
+    for (let y = offY; y <= imgH; y += bh) {
             this.srcCtx.beginPath();
             this.srcCtx.moveTo(0, Math.floor(y) + 0.5);
             this.srcCtx.lineTo(imgW, Math.floor(y) + 0.5);
@@ -403,9 +418,9 @@ class PixelNormalizer {
 
     // HSL snapping: cluster in HSL space with circular hue distance
     snapColorsHSL(result, tolerancePercent) {
-        const ctx = result.canvas.getContext('2d');
-        const img = ctx.getImageData(0, 0, result.outW, result.outH);
-        const d = img.data;
+    const srcCtx = (result.baseCanvas || result.canvas).getContext('2d');
+    const srcImg = srcCtx.getImageData(0, 0, result.outW, result.outH);
+    const d = srcImg.data;
         const len = result.outW * result.outH;
 
         // Build clusters with radius based on tolerance. Distance metric: weighted HSL distance.
@@ -482,10 +497,18 @@ class PixelNormalizer {
                 if (di<best){best=di; bi=p;}
             }
             const o=i*4; const pc=paletteRGB[bi];
-            d[o]=pc.r; d[o+1]=pc.g; d[o+2]=pc.b; d[o+3]=255;
+            // write to a fresh output buffer so snaps are from base each time
+            values[i]._r = pc.r; values[i]._g = pc.g; values[i]._b = pc.b;
         }
 
-        ctx.putImageData(img,0,0);
+        // Put results into the working canvas (not base)
+        const outCtx = result.canvas.getContext('2d');
+        const outImg = outCtx.createImageData(result.outW, result.outH);
+        const outData = outImg.data;
+        for (let i=0;i<len;i++){
+            const o=i*4; outData[o]=values[i]._r; outData[o+1]=values[i]._g; outData[o+2]=values[i]._b; outData[o+3]=255;
+        }
+        outCtx.putImageData(outImg,0,0);
         if (this.analysisInfo) this.analysisInfo.textContent += ` | HSL snapped to ${paletteRGB.length} colors (tol ${tolerancePercent}%)`;
         this._renderPalette(paletteRGB);
         return { ...result, canvas: result.canvas, palette: paletteRGB };
