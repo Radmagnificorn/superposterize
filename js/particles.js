@@ -19,9 +19,11 @@ export function initParticles() {
     const originW         = document.getElementById('originW');
     const originH         = document.getElementById('originH');
     const particleCountInput = document.getElementById('particleCount');
-    const spawnBtn        = document.getElementById('spawnParticles');
-    const playBtn         = document.getElementById('playBtn');
-    const stopBtn         = document.getElementById('stopBtn');
+    const spawnBtn         = document.getElementById('spawnParticles');
+    const playBtn          = document.getElementById('playBtn');
+    const stopBtn          = document.getElementById('stopBtn');
+    const respawnCheck     = document.getElementById('respawnCheck');
+    const randomizeCheck   = document.getElementById('randomizeCheck');
     const emitDirection   = document.getElementById('emitDirection');
     const emitSpread      = document.getElementById('emitSpread');
     const emitSpeedMin    = document.getElementById('emitSpeedMin');
@@ -34,10 +36,41 @@ export function initParticles() {
 
     // ── Simulation loop ───────────────────────────────────────────────────────
 
+    function computeVelocity() {
+        const dirDeg    = parseFloat(emitDirection.value) || 0;
+        const spreadDeg = Math.abs(parseFloat(emitSpread.value) || 0);
+        const spdMin    = parseFloat(emitSpeedMin.value) || 0;
+        const spdMax    = Math.max(spdMin, parseFloat(emitSpeedMax.value) || 0);
+        const angleDeg  = dirDeg + (Math.random() - 0.5) * spreadDeg;
+        const angleRad  = angleDeg * Math.PI / 180;
+        const speed     = spdMin + Math.random() * (spdMax - spdMin);
+        return { vx: Math.cos(angleRad) * speed, vy: Math.sin(angleRad) * speed };
+    }
+
     function step() {
-        for (const p of particles) {
+        const doRespawn   = respawnCheck.checked;
+        const doRandomize = randomizeCheck.checked;
+        const cx  = parseFloat(originX.value) || 0;
+        const cy  = parseFloat(originY.value) || 0;
+        const bw  = Math.max(0, parseFloat(originW.value) || 0);
+        const bh  = Math.max(0, parseFloat(originH.value) || 0);
+        for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
             p.x += p.vx;
             p.y += p.vy;
+            if (doRespawn && (p.x < 0 || p.x >= canvas.width || p.y < 0 || p.y >= canvas.height)) {
+                if (doRandomize) {
+                    p.x = bw > 0 ? cx - bw / 2 + Math.random() * bw : cx;
+                    p.y = bh > 0 ? cy - bh / 2 + Math.random() * bh : cy;
+                } else {
+                    const snap = spawnSnapshot[i];
+                    p.x = snap.x;
+                    p.y = snap.y;
+                }
+                const vel = computeVelocity();
+                p.vx = vel.vx;
+                p.vy = vel.vy;
+            }
         }
         redraw();
         rafId = requestAnimationFrame(step);
@@ -45,6 +78,11 @@ export function initParticles() {
 
     function play() {
         if (rafId !== null) return;
+        for (const p of particles) {
+            const vel = computeVelocity();
+            p.vx = vel.vx;
+            p.vy = vel.vy;
+        }
         rafId = requestAnimationFrame(step);
         playBtn.disabled = true;
         stopBtn.disabled = false;
@@ -125,22 +163,13 @@ export function initParticles() {
         const bh      = Math.max(0, parseFloat(originH.value) || 0);
         const left    = cx - bw / 2;
         const top     = cy - bh / 2;
-        const dirDeg  = parseFloat(emitDirection.value) || 0;
-        const spreadDeg = Math.abs(parseFloat(emitSpread.value) || 0);
-        const spdMin  = parseFloat(emitSpeedMin.value) || 0;
-        const spdMax  = Math.max(spdMin, parseFloat(emitSpeedMax.value) || 0);
         particles = [];
         for (let i = 0; i < count; i++) {
             const px = bw > 0 ? left + Math.random() * bw : cx;
             const py = bh > 0 ? top  + Math.random() * bh : cy;
-            const angleDeg = dirDeg + (Math.random() - 0.5) * spreadDeg;
-            const angleRad = angleDeg * Math.PI / 180;
-            const speed    = spdMin + Math.random() * (spdMax - spdMin);
-            const vx = Math.cos(angleRad) * speed;
-            const vy = Math.sin(angleRad) * speed;
-            particles.push(new Particle(px, py, vx, vy));
+            particles.push(new Particle(px, py, 0, 0));
         }
-        spawnSnapshot = particles.map(p => new Particle(p.x, p.y, p.vx, p.vy));
+        spawnSnapshot = particles.map(p => new Particle(p.x, p.y, 0, 0));
         stopSim();
         redraw();
     }
