@@ -20,9 +20,46 @@ export function initParticles() {
     const originH         = document.getElementById('originH');
     const particleCountInput = document.getElementById('particleCount');
     const spawnBtn        = document.getElementById('spawnParticles');
+    const playBtn         = document.getElementById('playBtn');
+    const stopBtn         = document.getElementById('stopBtn');
+    const emitDirection   = document.getElementById('emitDirection');
+    const emitSpread      = document.getElementById('emitSpread');
+    const emitSpeedMin    = document.getElementById('emitSpeedMin');
+    const emitSpeedMax    = document.getElementById('emitSpeedMax');
 
     let loadedImage = null;
     let particles   = [];
+    let rafId       = null;
+    let spawnSnapshot = []; // stores initial state for reset
+
+    // ── Simulation loop ───────────────────────────────────────────────────────
+
+    function step() {
+        for (const p of particles) {
+            p.x += p.vx;
+            p.y += p.vy;
+        }
+        redraw();
+        rafId = requestAnimationFrame(step);
+    }
+
+    function play() {
+        if (rafId !== null) return;
+        rafId = requestAnimationFrame(step);
+        playBtn.disabled = true;
+        stopBtn.disabled = false;
+    }
+
+    function stopSim() {
+        if (rafId !== null) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+        particles = spawnSnapshot.map(p => new Particle(p.x, p.y, p.vx, p.vy));
+        redraw();
+        playBtn.disabled = false;
+        stopBtn.disabled = true;
+    }
 
     // ── Drawing ──────────────────────────────────────────────────────────────
 
@@ -81,19 +118,30 @@ export function initParticles() {
     // ── Spawning ──────────────────────────────────────────────────────────────
 
     function spawnParticles() {
-        const count = Math.max(0, parseInt(particleCountInput.value, 10) || 0);
-        const cx    = parseFloat(originX.value) || 0;
-        const cy    = parseFloat(originY.value) || 0;
-        const bw    = Math.max(0, parseFloat(originW.value) || 0);
-        const bh    = Math.max(0, parseFloat(originH.value) || 0);
-        const left  = cx - bw / 2;
-        const top   = cy - bh / 2;
+        const count   = Math.max(0, parseInt(particleCountInput.value, 10) || 0);
+        const cx      = parseFloat(originX.value) || 0;
+        const cy      = parseFloat(originY.value) || 0;
+        const bw      = Math.max(0, parseFloat(originW.value) || 0);
+        const bh      = Math.max(0, parseFloat(originH.value) || 0);
+        const left    = cx - bw / 2;
+        const top     = cy - bh / 2;
+        const dirDeg  = parseFloat(emitDirection.value) || 0;
+        const spreadDeg = Math.abs(parseFloat(emitSpread.value) || 0);
+        const spdMin  = parseFloat(emitSpeedMin.value) || 0;
+        const spdMax  = Math.max(spdMin, parseFloat(emitSpeedMax.value) || 0);
         particles = [];
         for (let i = 0; i < count; i++) {
             const px = bw > 0 ? left + Math.random() * bw : cx;
             const py = bh > 0 ? top  + Math.random() * bh : cy;
-            particles.push(new Particle(px, py));
+            const angleDeg = dirDeg + (Math.random() - 0.5) * spreadDeg;
+            const angleRad = angleDeg * Math.PI / 180;
+            const speed    = spdMin + Math.random() * (spdMax - spdMin);
+            const vx = Math.cos(angleRad) * speed;
+            const vy = Math.sin(angleRad) * speed;
+            particles.push(new Particle(px, py, vx, vy));
         }
+        spawnSnapshot = particles.map(p => new Particle(p.x, p.y, p.vx, p.vy));
+        stopSim();
         redraw();
     }
 
@@ -142,6 +190,9 @@ export function initParticles() {
     // ── Spawn button ──────────────────────────────────────────────────────────
 
     spawnBtn.addEventListener('click', spawnParticles);
+
+    playBtn.addEventListener('click', play);
+    stopBtn.addEventListener('click', stopSim);
 
     // ── Canvas size ───────────────────────────────────────────────────────────
 

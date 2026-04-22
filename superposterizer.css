@@ -178,6 +178,12 @@ button:active {
     max-width: 100%;
 }
 
+.particles-playback {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
 .particles-canvas-bg--black { background: #000; }
 .particles-canvas-bg--white { background: #fff; }
 .particles-canvas-bg--checker {
