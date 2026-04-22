@@ -24,15 +24,22 @@ export function initParticles() {
     const stopBtn          = document.getElementById('stopBtn');
     const respawnCheck     = document.getElementById('respawnCheck');
     const randomizeCheck   = document.getElementById('randomizeCheck');
+    const simFpsInput      = document.getElementById('simFps');
+    const opacityAnimCheck = document.getElementById('opacityAnimCheck');
+    const fadeInFrames     = document.getElementById('fadeInFrames');
+    const visibleFrames    = document.getElementById('visibleFrames');
+    const fadeOutFrames    = document.getElementById('fadeOutFrames');
+    const invisibleFrames  = document.getElementById('invisibleFrames');
     const emitDirection   = document.getElementById('emitDirection');
     const emitSpread      = document.getElementById('emitSpread');
     const emitSpeedMin    = document.getElementById('emitSpeedMin');
     const emitSpeedMax    = document.getElementById('emitSpeedMax');
 
-    let loadedImage = null;
-    let particles   = [];
-    let rafId       = null;
-    let spawnSnapshot = []; // stores initial state for reset
+    let loadedImage   = null;
+    let particles     = [];
+    let rafId         = null;
+    let spawnSnapshot = [];
+    let lastStepTime  = 0;
 
     // ── Simulation loop ───────────────────────────────────────────────────────
 
@@ -47,7 +54,40 @@ export function initParticles() {
         return { vx: Math.cos(angleRad) * speed, vy: Math.sin(angleRad) * speed };
     }
 
-    function step() {
+    function stepOpacity(p, fadeIn, visible, fadeOut, invisible) {
+        const cycleDur = fadeIn + visible + fadeOut + invisible;
+        if (cycleDur === 0) { p.alpha = 1; return; }
+        p.phaseTimer--;
+        if (p.phaseTimer > 0) {
+            if      (p.phase === 'fading-in')  p.alpha = fadeIn  > 0 ? 1 - p.phaseTimer / fadeIn  : 1;
+            else if (p.phase === 'fading-out') p.alpha = fadeOut > 0 ?     p.phaseTimer / fadeOut  : 0;
+            return;
+        }
+        // advance to next phase
+        if (p.phase === 'visible') {
+            p.phase = 'fading-out'; p.phaseTimer = fadeOut; p.alpha = 1;
+        } else if (p.phase === 'fading-out') {
+            p.phase = 'invisible'; p.phaseTimer = invisible; p.alpha = 0;
+        } else if (p.phase === 'invisible') {
+            p.phase = 'fading-in'; p.phaseTimer = fadeIn; p.alpha = 0;
+        } else { // fading-in
+            p.phase = 'visible'; p.phaseTimer = visible; p.alpha = 1;
+        }
+    }
+
+    function step(timestamp) {
+        const fps      = Math.max(1, parseInt(simFpsInput.value, 10) || 12);
+        const interval = 1000 / fps;
+        if (timestamp - lastStepTime < interval) {
+            rafId = requestAnimationFrame(step);
+            return;
+        }
+        lastStepTime = timestamp;
+        const doOpacity   = opacityAnimCheck.checked;
+        const fadeIn   = Math.max(0, parseInt(fadeInFrames.value,    10) || 0);
+        const visible  = Math.max(0, parseInt(visibleFrames.value,   10) || 0);
+        const fadeOut  = Math.max(0, parseInt(fadeOutFrames.value,   10) || 0);
+        const invisible= Math.max(0, parseInt(invisibleFrames.value, 10) || 0);
         const doRespawn   = respawnCheck.checked;
         const doRandomize = randomizeCheck.checked;
         const cx  = parseFloat(originX.value) || 0;
@@ -58,6 +98,7 @@ export function initParticles() {
             const p = particles[i];
             p.x += p.vx;
             p.y += p.vy;
+            if (doOpacity) stepOpacity(p, fadeIn, visible, fadeOut, invisible);
             if (doRespawn && (p.x < 0 || p.x >= canvas.width || p.y < 0 || p.y >= canvas.height)) {
                 if (doRandomize) {
                     p.x = bw > 0 ? cx - bw / 2 + Math.random() * bw : cx;
@@ -82,6 +123,27 @@ export function initParticles() {
             const vel = computeVelocity();
             p.vx = vel.vx;
             p.vy = vel.vy;
+            // randomise starting phase so particles don't all pulse in sync
+            const fadeIn   = Math.max(0, parseInt(fadeInFrames.value,    10) || 0);
+            const visible  = Math.max(0, parseInt(visibleFrames.value,   10) || 0);
+            const fadeOut  = Math.max(0, parseInt(fadeOutFrames.value,   10) || 0);
+            const invisible= Math.max(0, parseInt(invisibleFrames.value, 10) || 0);
+            const cycleDur = fadeIn + visible + fadeOut + invisible;
+            if (opacityAnimCheck.checked && cycleDur > 0) {
+                const offset = Math.floor(Math.random() * cycleDur);
+                if (offset < fadeIn) {
+                    p.phase = 'fading-in';  p.phaseTimer = fadeIn  - offset; p.alpha = fadeIn > 0 ? 1 - (fadeIn - offset) / fadeIn : 1;
+                } else if (offset < fadeIn + visible) {
+                    p.phase = 'visible';    p.phaseTimer = fadeIn + visible - offset; p.alpha = 1;
+                } else if (offset < fadeIn + visible + fadeOut) {
+                    const rem = fadeIn + visible + fadeOut - offset;
+                    p.phase = 'fading-out'; p.phaseTimer = rem; p.alpha = fadeOut > 0 ? rem / fadeOut : 0;
+                } else {
+                    p.phase = 'invisible';  p.phaseTimer = cycleDur - offset; p.alpha = 0;
+                }
+            } else {
+                p.alpha = 1; p.phase = 'visible'; p.phaseTimer = 0;
+            }
         }
         rafId = requestAnimationFrame(step);
         playBtn.disabled = true;
@@ -101,7 +163,9 @@ export function initParticles() {
 
     // ── Drawing ──────────────────────────────────────────────────────────────
 
-    function drawParticleSprite(ctx, x, y) {
+    function drawParticleSprite(ctx, x, y, alpha) {
+        ctx.save();
+        ctx.globalAlpha *= alpha;
         if (loadedImage) {
             ctx.drawImage(loadedImage, Math.round(x), Math.round(y));
         } else {
@@ -110,6 +174,7 @@ export function initParticles() {
             ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
             ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
         }
+        ctx.restore();
     }
 
     function drawOriginBox() {
@@ -132,7 +197,7 @@ export function initParticles() {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         for (const p of particles) {
-            drawParticleSprite(ctx, p.x, p.y);
+            drawParticleSprite(ctx, p.x, p.y, p.alpha);
         }
         drawOriginBox();
     }

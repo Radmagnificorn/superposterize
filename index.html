@@ -123,6 +123,8 @@
                         <button id="stopBtn" disabled>&#9632; Stop</button>
                         <label><input type="checkbox" id="respawnCheck" checked /> Respawn</label>
                         <label><input type="checkbox" id="randomizeCheck" checked /> Randomize</label>
+                        <label for="simFps">FPS</label>
+                        <input type="number" id="simFps" value="12" min="1" max="60" step="1" style="width:4em" />
                     </div>
 
                     <div class="particles-control-group">
@@ -147,6 +149,29 @@
                             <label for="particleCount">Count</label>
                             <input type="number" id="particleCount" value="10" min="0" step="1" />
                             <button id="spawnParticles">Spawn</button>
+                        </div>
+                    </div>
+
+                    <div class="particles-control-group">
+                        <h3>Particle system &mdash; Opacity</h3>
+                        <div class="control-row">
+                            <label><input type="checkbox" id="opacityAnimCheck" /> Enable opacity animation</label>
+                        </div>
+                        <div class="control-row">
+                            <label for="fadeInFrames">Fade in (frames)</label>
+                            <input type="number" id="fadeInFrames" value="30" min="0" step="1" />
+                        </div>
+                        <div class="control-row">
+                            <label for="visibleFrames">Visible (frames)</label>
+                            <input type="number" id="visibleFrames" value="60" min="0" step="1" />
+                        </div>
+                        <div class="control-row">
+                            <label for="fadeOutFrames">Fade out (frames)</label>
+                            <input type="number" id="fadeOutFrames" value="30" min="0" step="1" />
+                        </div>
+                        <div class="control-row">
+                            <label for="invisibleFrames">Invisible (frames)</label>
+                            <input type="number" id="invisibleFrames" value="20" min="0" step="1" />
                         </div>
                     </div>
 
