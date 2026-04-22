@@ -1,6 +1,7 @@
 <!doctype html>
 <html>
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Super Posterizer</title>
     <script src="./superposterizer.js" defer></script>
     <link rel="stylesheet" href="./superposterizer.css">
@@ -10,6 +11,7 @@
             <div role="tablist" aria-label="Apps" class="tablist">
                 <button role="tab" aria-selected="true" aria-controls="posterizer-panel" id="posterizer-tab">Posterizer</button>
                 <button role="tab" aria-selected="false" aria-controls="newapp-panel" id="newapp-tab" tabindex="-1">Pixel art normalizer</button>
+                <button role="tab" aria-selected="false" aria-controls="particles-panel" id="particles-tab" tabindex="-1">Particles</button>
             </div>
 
             <section id="posterizer-panel" role="tabpanel" aria-labelledby="posterizer-tab">
@@ -63,6 +65,60 @@
                     <div id="paletteSwatches" class="palette" aria-label="Palette preview"></div>
                 </div>
             </section>
+            <section id="particles-panel" role="tabpanel" aria-labelledby="particles-tab" hidden>
+                <div class="particles-app">
+                    <h2>Particle Animator</h2>
+
+                    <div class="particles-control-group">
+                        <h3>Image</h3>
+                        <div class="control-row">
+                            <label for="particleImageLoad" class="btn">Load Image</label>
+                            <input type="file" id="particleImageLoad" accept="image/png" class="visually-hidden" />
+                            <span id="particleImageName" class="file-name-display">No file chosen</span>
+                            <button id="clearParticleImage" hidden>Clear</button>
+                        </div>
+                        <div class="control-row" id="particleColorRow">
+                            <label for="particleColor">Particle color</label>
+                            <input type="color" id="particleColor" value="#ffffff" />
+                            <input type="range" id="particleAlpha" min="0" max="255" value="255" step="1" title="Alpha" />
+                            <span id="particleAlphaLabel" class="unit">255</span>
+                        </div>
+                    </div>
+
+                    <div class="particles-control-group">
+                        <h3>Canvas</h3>
+                        <div class="control-row">
+                            <label for="canvasWidth">Width (px)</label>
+                            <input type="number" id="canvasWidth" value="64" min="1" max="3840" step="1" />
+                        </div>
+                        <div class="control-row">
+                            <label for="canvasHeight">Height (px)</label>
+                            <input type="number" id="canvasHeight" value="64" min="1" max="2160" step="1" />
+                        </div>
+                        <div class="control-row">
+                            <label for="canvasScale">Display scale</label>
+                            <input type="number" id="canvasScale" value="8" min="1" max="32" step="1" />
+                            <span class="unit">×</span>
+                        </div>
+                        <button id="applyCanvasSize">Apply</button>
+                    </div>
+
+                    <div class="particles-control-group">
+                        <h3>Canvas background</h3>
+                        <div class="control-row">
+                            <div class="bg-picker" role="group" aria-label="Canvas background">
+                                <button class="bg-btn bg-btn--black active" data-bg="black" aria-pressed="true" title="Black"></button>
+                                <button class="bg-btn bg-btn--white" data-bg="white" aria-pressed="false" title="White"></button>
+                                <button class="bg-btn bg-btn--checker" data-bg="checker" aria-pressed="false" title="Transparent"></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="particles-canvas-wrap particles-canvas-bg--black">
+                        <canvas id="particleCanvas" width="64" height="64"></canvas>
+                    </div>
+                </div>
+            </section>
         </div>
 
         <script>
@@ -88,6 +144,110 @@
                     const currentIndex = Array.prototype.indexOf.call(tabs, document.activeElement);
                     if (e.key === 'ArrowRight') { e.preventDefault(); activateTab(tabs[(currentIndex + 1) % tabs.length]); }
                     if (e.key === 'ArrowLeft') { e.preventDefault(); activateTab(tabs[(currentIndex - 1 + tabs.length) % tabs.length]); }
+                });
+            });
+        })();
+
+        (function() {
+            const canvas = document.getElementById('particleCanvas');
+            const widthInput = document.getElementById('canvasWidth');
+            const heightInput = document.getElementById('canvasHeight');
+            const scaleInput = document.getElementById('canvasScale');
+            const applyBtn = document.getElementById('applyCanvasSize');
+            const imageLoad = document.getElementById('particleImageLoad');
+            const imageNameDisplay = document.getElementById('particleImageName');
+            const clearImageBtn = document.getElementById('clearParticleImage');
+            const colorRow = document.getElementById('particleColorRow');
+            const colorPicker = document.getElementById('particleColor');
+            const alphaSlider = document.getElementById('particleAlpha');
+            const alphaLabel = document.getElementById('particleAlphaLabel');
+
+            let loadedImage = null;
+
+            function hexToRgb(hex) {
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                return { r, g, b };
+            }
+
+            function drawParticle() {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                if (loadedImage) {
+                    ctx.drawImage(loadedImage, 0, 0);
+                } else {
+                    const { r, g, b } = hexToRgb(colorPicker.value);
+                    const a = parseInt(alphaSlider.value, 10) / 255;
+                    ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
+                    ctx.fillRect(0, 0, 1, 1);
+                }
+            }
+
+            function applySize() {
+                const w = Math.max(1, parseInt(widthInput.value, 10) || 64);
+                const h = Math.max(1, parseInt(heightInput.value, 10) || 64);
+                const scale = Math.max(1, parseInt(scaleInput.value, 10) || 8);
+                widthInput.value = w;
+                heightInput.value = h;
+                scaleInput.value = scale;
+                canvas.width = w;
+                canvas.height = h;
+                canvas.style.width = (w * scale) + 'px';
+                canvas.style.height = (h * scale) + 'px';
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, w, h);
+                drawParticle();
+            }
+
+            imageLoad.addEventListener('change', function() {
+                const file = this.files[0];
+                if (!file) return;
+                imageNameDisplay.textContent = file.name;
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = function() {
+                    loadedImage = img;
+                    URL.revokeObjectURL(url);
+                    colorRow.hidden = true;
+                    clearImageBtn.hidden = false;
+                    drawParticle();
+                };
+                img.src = url;
+            });
+
+            clearImageBtn.addEventListener('click', function() {
+                loadedImage = null;
+                imageLoad.value = '';
+                imageNameDisplay.textContent = 'No file chosen';
+                clearImageBtn.hidden = true;
+                colorRow.hidden = false;
+                drawParticle();
+            });
+
+            colorPicker.addEventListener('input', function() {
+                if (!loadedImage) drawParticle();
+            });
+
+            alphaSlider.addEventListener('input', function() {
+                alphaLabel.textContent = alphaSlider.value;
+                if (!loadedImage) drawParticle();
+            });
+
+            applyBtn.addEventListener('click', applySize);
+            applySize();
+
+            // Canvas background picker
+            const canvasWrap = canvas.closest('.particles-canvas-wrap');
+            document.querySelectorAll('.bg-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.bg-btn').forEach(b => {
+                        b.classList.remove('active');
+                        b.setAttribute('aria-pressed', 'false');
+                    });
+                    this.classList.add('active');
+                    this.setAttribute('aria-pressed', 'true');
+                    canvasWrap.className = 'particles-canvas-wrap particles-canvas-bg--' + this.dataset.bg;
                 });
             });
         })();

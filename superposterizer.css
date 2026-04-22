@@ -69,3 +69,164 @@
     height: 18px;
     border: 1px solid #ccc;
 }
+
+/* Particles tab */
+.particles-app {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 600px;
+}
+
+.particles-app h2 {
+    margin: 0 0 4px;
+}
+
+.particles-control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fafafa;
+}
+
+.particles-control-group h3 {
+    margin: 0 0 4px;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #666;
+}
+
+.control-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-row label {
+    min-width: 110px;
+    font-weight: 500;
+}
+
+.control-row input[type="number"] {
+    width: 72px;
+    padding: 6px 8px;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.control-row .unit {
+    color: #555;
+}
+
+.btn,
+button {
+    display: inline-block;
+    padding: 8px 16px;
+    font-size: 1rem;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.btn:active,
+button:active {
+    background: #eee;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.file-name-display {
+    font-size: 0.9rem;
+    color: #555;
+    align-self: center;
+}
+
+#particleColor {
+    width: 48px;
+    height: 36px;
+    padding: 2px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#particleAlpha {
+    flex: 1;
+    min-width: 80px;
+    max-width: 140px;
+    cursor: pointer;
+}
+
+.particles-canvas-wrap {
+    overflow: auto;
+    border: 1px solid #444;
+    display: inline-block;
+    max-width: 100%;
+}
+
+.particles-canvas-bg--black { background: #000; }
+.particles-canvas-bg--white { background: #fff; }
+.particles-canvas-bg--checker {
+    background-color: #ccc;
+    background-image:
+        linear-gradient(45deg, #888 25%, transparent 25%),
+        linear-gradient(-45deg, #888 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #888 75%),
+        linear-gradient(-45deg, transparent 75%, #888 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+}
+
+/* Background picker buttons */
+.bg-picker {
+    display: flex;
+    gap: 6px;
+}
+
+.bg-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+}
+
+.bg-btn.active {
+    border-color: #0078d4;
+    box-shadow: 0 0 0 1px #0078d4;
+}
+
+.bg-btn--black { background: #000; }
+.bg-btn--white { background: #fff; border: 2px solid #ccc; }
+.bg-btn--checker {
+    background-color: #ccc;
+    background-image:
+        linear-gradient(45deg, #888 25%, transparent 25%),
+        linear-gradient(-45deg, #888 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #888 75%),
+        linear-gradient(-45deg, transparent 75%, #888 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+}
+
+#particleCanvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
