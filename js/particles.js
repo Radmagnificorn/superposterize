@@ -34,12 +34,28 @@ export function initParticles() {
     const emitSpread      = document.getElementById('emitSpread');
     const emitSpeedMin    = document.getElementById('emitSpeedMin');
     const emitSpeedMax    = document.getElementById('emitSpeedMax');
+    const maskImageLoad   = document.getElementById('maskImageLoad');
+    const maskImageName   = document.getElementById('maskImageName');
+    const clearMaskBtn    = document.getElementById('clearMaskImage');
+    const maskOptions     = document.getElementById('maskOptions');
+    const maskPositionRow = document.getElementById('maskPositionRow');
+    const showMaskCheck   = document.getElementById('showMaskCheck');
+    const maskOffsetX     = document.getElementById('maskOffsetX');
+    const maskOffsetY     = document.getElementById('maskOffsetY');
 
     let loadedImage   = null;
+    let maskImage     = null;
     let particles     = [];
     let rafId         = null;
     let spawnSnapshot = [];
     let lastStepTime  = 0;
+
+    // offscreen canvas used to apply the mask before compositing onto the main canvas
+    const offscreen = document.createElement('canvas');
+    const offscreenCtx = offscreen.getContext('2d');
+
+    let maskOX = 0;
+    let maskOY = 0;
 
     // ── Simulation loop ───────────────────────────────────────────────────────
 
@@ -196,9 +212,32 @@ export function initParticles() {
     function redraw() {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        for (const p of particles) {
-            drawParticleSprite(ctx, p.x, p.y, p.alpha);
+
+        if (maskImage) {
+            // Draw particles onto the offscreen canvas
+            offscreenCtx.clearRect(0, 0, offscreen.width, offscreen.height);
+            for (const p of particles) {
+                drawParticleSprite(offscreenCtx, p.x, p.y, p.alpha);
+            }
+            // Clip particles by the mask alpha (multiplicative transparency)
+            offscreenCtx.globalCompositeOperation = 'destination-in';
+            offscreenCtx.drawImage(maskImage, maskOX, maskOY);
+            offscreenCtx.globalCompositeOperation = 'source-over';
+            // Composite masked particles onto the main canvas
+            ctx.drawImage(offscreen, 0, 0);
+            // Optionally show the mask at 50% opacity for reference
+            if (showMaskCheck.checked) {
+                ctx.save();
+                ctx.globalAlpha = 0.5;
+                ctx.drawImage(maskImage, maskOX, maskOY);
+                ctx.restore();
+            }
+        } else {
+            for (const p of particles) {
+                drawParticleSprite(ctx, p.x, p.y, p.alpha);
+            }
         }
+
         drawOriginBox();
     }
 
@@ -215,6 +254,8 @@ export function initParticles() {
         canvas.height = h;
         canvas.style.width  = (w * scale) + 'px';
         canvas.style.height = (h * scale) + 'px';
+        offscreen.width  = w;
+        offscreen.height = h;
         redraw();
     }
 
@@ -264,6 +305,46 @@ export function initParticles() {
         clearImageBtn.hidden = true;
         colorRow.hidden      = false;
         redraw();
+    });
+
+    // ── Mask image loading ────────────────────────────────────────────────────
+
+    maskImageLoad.addEventListener('change', function () {
+        const file = this.files[0];
+        if (!file) return;
+        maskImageName.textContent = file.name;
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = function () {
+            maskImage = img;
+            URL.revokeObjectURL(url);
+            clearMaskBtn.hidden   = false;
+            maskOptions.hidden    = false;
+            maskPositionRow.hidden = false;
+            redraw();
+        };
+        img.src = url;
+    });
+
+    clearMaskBtn.addEventListener('click', function () {
+        maskImage = null;
+        maskImageLoad.value = '';
+        maskImageName.textContent = 'No file chosen';
+        clearMaskBtn.hidden    = true;
+        maskOptions.hidden     = true;
+        maskPositionRow.hidden = true;
+        showMaskCheck.checked  = false;
+        redraw();
+    });
+
+    showMaskCheck.addEventListener('change', redraw);
+
+    [maskOffsetX, maskOffsetY].forEach(input => {
+        input.addEventListener('input', () => {
+            maskOX = parseInt(maskOffsetX.value, 10) || 0;
+            maskOY = parseInt(maskOffsetY.value, 10) || 0;
+            redraw();
+        });
     });
 
     // ── Color / alpha ─────────────────────────────────────────────────────────

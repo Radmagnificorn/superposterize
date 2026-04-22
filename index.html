@@ -86,6 +86,25 @@
                     </div>
 
                     <div class="particles-control-group">
+                        <h3>Transparency Mask</h3>
+                        <div class="control-row">
+                            <label for="maskImageLoad" class="btn">Load Mask</label>
+                            <input type="file" id="maskImageLoad" accept="image/png" class="visually-hidden" />
+                            <span id="maskImageName" class="file-name-display">No file chosen</span>
+                            <button id="clearMaskImage" hidden>Clear</button>
+                        </div>
+                        <div class="control-row" id="maskOptions" hidden>
+                            <label><input type="checkbox" id="showMaskCheck" /> Show mask (50% opacity)</label>
+                        </div>
+                        <div class="control-row" id="maskPositionRow" hidden>
+                            <label for="maskOffsetX">Offset X</label>
+                            <input type="number" id="maskOffsetX" value="0" step="1" />
+                            <label for="maskOffsetY">Y</label>
+                            <input type="number" id="maskOffsetY" value="0" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="particles-control-group">
                         <h3>Canvas</h3>
                         <div class="control-row">
                             <label for="canvasWidth">Width (px)</label>
