@@ -117,6 +117,31 @@
                     <div class="particles-canvas-wrap particles-canvas-bg--black">
                         <canvas id="particleCanvas" width="64" height="64"></canvas>
                     </div>
+
+                    <div class="particles-control-group">
+                        <h3>Particle system &mdash; Origin</h3>
+                        <div class="control-row">
+                            <label for="originX">X</label>
+                            <input type="number" id="originX" value="32" step="1" />
+                            <label for="originY">Y</label>
+                            <input type="number" id="originY" value="32" step="1" />
+                        </div>
+                        <div class="control-row">
+                            <label for="originW">Box width</label>
+                            <input type="number" id="originW" value="10" min="0" step="1" />
+                            <label for="originH">Box height</label>
+                            <input type="number" id="originH" value="10" min="0" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="particles-control-group">
+                        <h3>Particle system &mdash; Count</h3>
+                        <div class="control-row">
+                            <label for="particleCount">Count</label>
+                            <input type="number" id="particleCount" value="10" min="0" step="1" />
+                            <button id="spawnParticles">Spawn</button>
+                        </div>
+                    </div>
                 </div>
             </section>
         </div>
@@ -161,8 +186,23 @@
             const colorPicker = document.getElementById('particleColor');
             const alphaSlider = document.getElementById('particleAlpha');
             const alphaLabel = document.getElementById('particleAlphaLabel');
+            const originX = document.getElementById('originX');
+            const originY = document.getElementById('originY');
+            const originW = document.getElementById('originW');
+            const originH = document.getElementById('originH');
+            const particleCountInput = document.getElementById('particleCount');
+            const spawnBtn = document.getElementById('spawnParticles');
 
             let loadedImage = null;
+
+            class Particle {
+                constructor(x, y) {
+                    this.x = x;
+                    this.y = y;
+                }
+            }
+
+            let particles = [];
 
             function hexToRgb(hex) {
                 const r = parseInt(hex.slice(1, 3), 16);
@@ -171,17 +211,57 @@
                 return { r, g, b };
             }
 
-            function drawParticle() {
+            function drawOriginBox() {
                 const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const x = parseFloat(originX.value) || 0;
+                const y = parseFloat(originY.value) || 0;
+                const w = Math.max(0, parseFloat(originW.value) || 0);
+                const h = Math.max(0, parseFloat(originH.value) || 0);
+                if (w === 0 && h === 0) return;
+                const left = Math.round(x - w / 2);
+                const top  = Math.round(y - h / 2);
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(left + 0.5, top + 0.5, w, h);
+                ctx.restore();
+            }
+
+            function spawnParticles() {
+                const count = Math.max(0, parseInt(particleCountInput.value, 10) || 0);
+                const cx = parseFloat(originX.value) || 0;
+                const cy = parseFloat(originY.value) || 0;
+                const bw = Math.max(0, parseFloat(originW.value) || 0);
+                const bh = Math.max(0, parseFloat(originH.value) || 0);
+                const left = cx - bw / 2;
+                const top  = cy - bh / 2;
+                particles = [];
+                for (let i = 0; i < count; i++) {
+                    const px = bw > 0 ? left + Math.random() * bw : cx;
+                    const py = bh > 0 ? top  + Math.random() * bh : cy;
+                    particles.push(new Particle(px, py));
+                }
+                redraw();
+            }
+
+            function drawParticleSprite(ctx, x, y) {
                 if (loadedImage) {
-                    ctx.drawImage(loadedImage, 0, 0);
+                    ctx.drawImage(loadedImage, Math.round(x), Math.round(y));
                 } else {
                     const { r, g, b } = hexToRgb(colorPicker.value);
                     const a = parseInt(alphaSlider.value, 10) / 255;
                     ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
-                    ctx.fillRect(0, 0, 1, 1);
+                    ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
                 }
+            }
+
+            function redraw() {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                for (const p of particles) {
+                    drawParticleSprite(ctx, p.x, p.y);
+                }
+                drawOriginBox();
             }
 
             function applySize() {
@@ -197,7 +277,7 @@
                 canvas.style.height = (h * scale) + 'px';
                 const ctx = canvas.getContext('2d');
                 ctx.clearRect(0, 0, w, h);
-                drawParticle();
+                redraw();
             }
 
             imageLoad.addEventListener('change', function() {
@@ -211,7 +291,7 @@
                     URL.revokeObjectURL(url);
                     colorRow.hidden = true;
                     clearImageBtn.hidden = false;
-                    drawParticle();
+                    redraw();
                 };
                 img.src = url;
             });
@@ -222,20 +302,26 @@
                 imageNameDisplay.textContent = 'No file chosen';
                 clearImageBtn.hidden = true;
                 colorRow.hidden = false;
-                drawParticle();
+                redraw();
             });
 
             colorPicker.addEventListener('input', function() {
-                if (!loadedImage) drawParticle();
+                if (!loadedImage) redraw();
             });
 
             alphaSlider.addEventListener('input', function() {
                 alphaLabel.textContent = alphaSlider.value;
-                if (!loadedImage) drawParticle();
+                if (!loadedImage) redraw();
             });
 
             applyBtn.addEventListener('click', applySize);
             applySize();
+
+            [originX, originY, originW, originH].forEach(input => {
+                input.addEventListener('input', redraw);
+            });
+
+            spawnBtn.addEventListener('click', spawnParticles);
 
             // Canvas background picker
             const canvasWrap = canvas.closest('.particles-canvas-wrap');
